@@ -1,0 +1,380 @@
+{
+  "name": "generador-posts-redes-sociales",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "8f115058-2365-4dfd-8975-53a70269d7d3",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        0
+      ],
+      "id": "1f73bf7f-9308-4893-b4e0-c605fde6e153",
+      "name": "Webhook",
+      "webhookId": "8f115058-2365-4dfd-8975-53a70269d7d3"
+    },
+    {
+      "parameters": {
+        "tableId": "posts",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "user_id",
+              "fieldValue": "={{ $('Webhook').item.json.body.userId }}"
+            },
+            {
+              "fieldId": "idea",
+              "fieldValue": "={{ $('Webhook').item.json.body.idea }}"
+            },
+            {
+              "fieldId": "network",
+              "fieldValue": "={{ $('Webhook').item.json.body.network }}"
+            },
+            {
+              "fieldId": "tone",
+              "fieldValue": "={{ $('Webhook').item.json.body.tone }}"
+            },
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ $json.output.post }}"
+            },
+            {
+              "fieldId": "hashtags",
+              "fieldValue": "={{ $json.output.hashtags }}"
+            },
+            {
+              "fieldId": "created_at",
+              "fieldValue": "={{ DateTime.now() }}"
+            },
+            {
+              "fieldId": "caracteres",
+              "fieldValue": "={{ $json.output.post.lenght() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        0
+      ],
+      "id": "84714a53-bbd3-4e51-9a67-b99e4df7d1f4",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9fugf06gFiM4CNc5",
+          "name": "Supabase account"
+        }
+      },
+      "notes": "Le tengo que habilitar el realTime a la tabla.\nLe puedo desactivar la autenticación por maill."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.network }}",
+                    "rightValue": "instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "98256a01-9ea8-4dfb-b621-556e8556e394"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "instagram"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f008f683-84ed-41d2-b666-e3f98d84d718",
+                    "leftValue": "={{ $json.body.network }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "linkedin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "687fee99-bd18-4a76-9a54-57674d4f5be0",
+                    "leftValue": "={{ $json.body.network }}",
+                    "rightValue": "x",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "twitter"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -16
+      ],
+      "id": "b316e8e5-dc50-4e8d-a630-48a275c7b1ce",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=IDEA: {{ $json.body.idea }}\nTONO: {{ $json.body.tone }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $json.systemMessage }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        736,
+        0
+      ],
+      "id": "d4b16ded-953b-49b3-b0ed-e4e36aca483f",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json.body;\n\nconst systemMessage = \"Sos un experto en marketing de contenidos para Instagram.\\nTu tarea es crear un post de Instagram exitoso a partir de los siguientes datos:\\n\\nIDEA: [IDEA]\\nTONO: [TONO] (puede ser: Profesional, Educativo, Inspirador o Humorístico)\\n\\nReglas del post:\\n- Texto emocional y optimizado para engagement\\n- Comenzá con un hook poderoso en la primera línea (esa línea es lo que aparece antes del 'ver más')\\n- Usá saltos de línea estratégicos para facilitar la lectura\\n- Incluí una llamada a la acción (CTA) al final del texto\\n- Longitud máxima: 2.200 caracteres\\n- Usá emojis de forma estratégica para reforzar el mensaje y romper bloques de texto\\n- Adaptá el tono indicado: Profesional (pulido, sin jerga), Educativo (claro, didáctico), Inspirador (emotivo, aspiracional), Humorístico (cercano, con gracia, sin forzar)\\n\\nFormato de respuesta (respetá este orden y estructura exacta):\\n\\nCONTENIDO:\\n[texto del post aquí]\\n\\nHASHTAGS:\\n[listado de 15 a 25 hashtags relevantes y estratégicos, mezclando hashtags grandes (#marketing), medianos (#contentcreator) y de nicho (#tipsderedes), todos en una sola línea separados por espacios]\"\n\nreturn[{\n  json:{\n    body: datos,\n    systemMessage\n  }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -192
+      ],
+      "id": "5a082195-f65d-4bdd-9d31-3a51648c653a",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json.body;\n\nconst systemMessage = \"Sos un experto en comunicación para Twitter/X.\\nTu tarea es crear un tweet exitoso a partir de los siguientes datos:\\n\\nIDEA: [IDEA]\\nTONO: [TONO] (puede ser: Profesional, Educativo, Inspirador o Humorístico)\\n\\nReglas del tweet:\\n- Estilo directo, conciso y con impacto inmediato\\n- Límite estricto: menos de 280 caracteres incluyendo hashtags\\n- Cada palabra debe tener un propósito: eliminá adjetivos innecesarios y relleno\\n- Podés usar un hilo (thread) SOLO si la idea lo requiere genuinamente; en ese caso generá máximo 3 tweets numerados (1/, 2/, 3/)\\n- Usá hashtags de forma selectiva: máximo 2, solo si agregan valor de descubrimiento real\\n- Adaptá el tono indicado: Profesional (directo, sin adornos, autoridad), Educativo (dato útil + contexto mínimo), Inspirador (frase potente, sin clichés), Humorístico (timing perfecto, remate en la última palabra si es posible)\\n\\nFormato de respuesta (respetá este orden y estructura exacta):\\n\\nCONTENIDO:\\n[tweet o hilo aquí. Si es hilo, numerá cada tweet como 1/, 2/, 3/]\\n\\nHASHTAGS:\\n[máximo 2 hashtags, en una sola línea separados por espacio. Si no aplica ninguno relevante, escribí: No se recomiendan hashtags para este tweet]\";\n\nreturn[{\n  json:{\n    body: datos,\n    systemMessage\n  }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        192
+      ],
+      "id": "61671da6-fc8b-438b-b76c-8f21cebe26b7",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json.body;\n\nconst systemMessage = \"Sos un experto en personal branding y contenido para LinkedIn.\\nTu tarea es crear un post de LinkedIn exitoso a partir de los siguientes datos:\\n\\nIDEA: [IDEA]\\nTONO: [TONO] (puede ser: Profesional, Educativo, Inspirador o Humorístico)\\n\\nReglas del post:\\n- Redacción profesional con estructura de storytelling (situación → conflicto o aprendizaje → resolución o reflexión)\\n- Primera línea impactante que genere el clic en 'ver más' (sin punto final para que corte bien)\\n- Párrafos cortos, máximo 3 líneas cada uno, con saltos de línea entre ellos\\n- Usá emojis de forma medida: solo para destacar puntos clave o como viñetas, nunca decorativos\\n- Incluí una llamada a la acción al final (pregunta abierta, invitación a comentar o compartir)\\n- Extensión media: entre 150 y 300 palabras\\n- Adaptá el tono indicado: Profesional (autoridad, datos, precisión), Educativo (estructura clara, tips accionables), Inspirador (historia personal o ajena, vulnerabilidad controlada), Humorístico (ironía inteligente, observación aguda, sin perder credibilidad)\\n\\nFormato de respuesta (respetá este orden y estructura exacta):\\n\\nCONTENIDO:\\n[texto del post aquí]\\n\\nHASHTAGS:\\n[entre 3 y 7 hashtags relevantes y específicos para LinkedIn, en una sola línea separados por espacios, priorizando hashtags con comunidad activa en la plataforma]\";\n\nreturn[{\n  json:{\n    body: datos,\n    systemMessage\n  }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "c9bd8551-2900-485b-a6dc-3ebc035f35a6",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"post\":\"post generado\",\n  \"hashtags\":[\"hashtag1\", \"hashtag2\", \"hashtag3\", \"hashtagN\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        176
+      ],
+      "id": "9ba43d8c-b1b6-458f-9b6e-5ae316c108d7",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        736,
+        176
+      ],
+      "id": "3a912298-c847-4aaa-b776-16601ac2e08c",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "PoNgpZ4I1fGyrDSA",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "America/Argentina/Buenos_Aires",
+    "callerPolicy": "workflowsFromSameOwner",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "versionId": "041fdf63-dc46-4329-aaf1-f99af53ac4b0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b74181930a8c68af667c33670eff6535c05e64ffaf070f0d61fda713c005af93"
+  },
+  "id": "mH2f9RgJpcsVSMpu",
+  "tags": []
+}

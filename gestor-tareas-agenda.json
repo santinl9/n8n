@@ -1,0 +1,634 @@
+{
+  "name": "gestor-tareas-agenda",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7c2d6687-8e29-4493-a1ed-c1e1297200de",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0a805675-4f17-4d1d-95ad-f6287b967af7",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        0
+      ],
+      "id": "220dc503-ef24-4837-bf96-c4ec981e401a",
+      "name": "sin Error"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tareas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json._sheetsData.columna }}",
+            "Tarea": "={{ $json._sheetsData.tarea }}",
+            "Fecha  AAAA-MM-DD": "={{ $json._sheetsData.fecha }}",
+            "Estado            pen | lis | age": "={{ $json._sheetsData.estado }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Tarea",
+              "displayName": "Tarea",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Responsable",
+              "displayName": "Responsable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Fecha  AAAA-MM-DD",
+              "displayName": "Fecha  AAAA-MM-DD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado            pen | lis | age",
+              "displayName": "Estado            pen | lis | age",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Procesada",
+              "displayName": "Procesada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        944,
+        96
+      ],
+      "id": "ebe1c187-f754-47fa-8883-1e4153e25b64",
+      "name": "actualizar Tarea(s)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tareas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Procesada"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "4f5fc657-dc9e-4e9d-9e9e-3ef3adc6ec1c",
+      "name": "recuperar Tarea(s)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const input = item.json;\n\n  // --- Raw inputs ---\n  const rawTarea = input['Tarea'] ?? '';\n  const rawResponsable = input['Responsable'] ?? '';\n  const rawFecha = input['Fecha  AAAA-MM-DD'] ?? '';\n  const rawEstado = input['Estado            pen | lis | age'] ?? '';\n\n  const ESTADOS_VALIDOS = ['pendiente', 'lista', 'agendada'];\n\n  // --- Validaciones ---\n  const tareaValida = rawTarea.trim() !== '';\n  const responsable = (rawResponsable.trim() === '' ? 'indefinido' : rawResponsable.trim()).toUpperCase();\n  const estadoNorm = rawEstado.trim().toLowerCase();\n  const estadoValido = ESTADOS_VALIDOS.includes(estadoNorm);\n  const columna = input.row_number;\n\n  // Validación de fecha\n  const fechaRegex = /^\\d{4}-\\d{2}-\\d{2}$/;\n  let fechaValida = false;\n  let fechaObj = null;\n  if (fechaRegex.test(rawFecha.trim())) {\n    fechaObj = new Date(rawFecha.trim() + 'T00:00:00');\n    fechaValida = !isNaN(fechaObj.getTime());\n  }\n\n  // Fecha +1\n  let fechaFin = null;\n  if (fechaValida) {\n    fechaFin = new Date(fechaObj.getTime() + 86400000).toISOString().slice(0, 10);\n  }\n\n  let error = (!tareaValida || !fechaValida || !estadoValido);\n\n  return {\n    json: {\n      summary: `${rawTarea.trim()} - ${responsable}`,\n      start: rawFecha.trim(),\n      end: fechaFin,\n      error: error,\n      _sheetsData:{\n        columna,\n        tarea: tareaValida ? rawTarea : 'tarea vacía',\n        responsable,\n        fecha: fechaValida ? rawFecha : `fecha inválida (${rawFecha})`,\n        estado: estadoValido ? estadoNorm : `estado inválido (${rawEstado})`,\n        procesada: true,\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "0a4d5680-fd7f-4e81-af8a-b17ea93a1096",
+      "name": "validar Tarea(s) + preparar Tarea(s)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3d48c6e4-3637-458f-b1a3-38c5131c0d8b",
+              "leftValue": "={{ $json._sheetsData.estado }}",
+              "rightValue": "lista",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        944,
+        -96
+      ],
+      "id": "72627042-fe7a-40ce-a525-c23711287e50",
+      "name": "tarea(s) Lista(s)"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tareas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json._sheetsData.columna }}",
+            "Procesada": "={{ $json._sheetsData.procesada }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Tarea",
+              "displayName": "Tarea",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Responsable",
+              "displayName": "Responsable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Fecha  AAAA-MM-DD",
+              "displayName": "Fecha  AAAA-MM-DD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Estado            pen | lis | age",
+              "displayName": "Estado            pen | lis | age",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Procesada",
+              "displayName": "Procesada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        608,
+        -128
+      ],
+      "id": "2764b55f-617c-43a8-9bc9-19a1e857730f",
+      "name": "actualizar Procesada",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "88242ff6c4ddf9e50848238e713babf570c4413c46b1749e2c89d1b4c41ae891@group.calendar.google.com",
+          "mode": "id"
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "allday": "yes",
+          "summary": "={{ $json.summary }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1152,
+        -112
+      ],
+      "id": "0d9a793b-a72b-4b30-af66-32c1c712c065",
+      "name": "agendar Tarea(s)",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "z5tW5mVAWUHPZCrP",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tareas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vl7ULYkR4jN6rLnGhtLA8Lcm42ITceT0kySaCKtrj7g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('tarea(s) Lista(s)').item.json._sheetsData.columna }}",
+            "Estado            pen | lis | age": "agendada"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Tarea",
+              "displayName": "Tarea",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Responsable",
+              "displayName": "Responsable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Fecha  AAAA-MM-DD",
+              "displayName": "Fecha  AAAA-MM-DD",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Estado            pen | lis | age",
+              "displayName": "Estado            pen | lis | age",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Procesada",
+              "displayName": "Procesada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        -208
+      ],
+      "id": "4684e25b-4006-444e-942d-a59c40a7f732",
+      "name": "actualizar EstadoTarea(s)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const datos = {\n    summary: item.json.summary,\n    start: item.json.start.date,\n  }\n  const [tarea, responsable] = datos.summary.split(' - ');\n  \n  const mensaje = `TAREA AGENDADA📌: ${tarea}\\n\\t-responsable:${responsable}\\n\\t-vencimiento:${datos.start}`\n\n  return {\n    json: { mensaje }\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        -16
+      ],
+      "id": "aa7e0e81-7f71-4ee2-b01c-864cfc2bbaf8",
+      "name": "preparar Mensaje"
+    },
+    {
+      "parameters": {
+        "chatId": "8601444437",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1552,
+        -16
+      ],
+      "id": "c34a8e8f-cbed-4150-9045-d109a1a4f57c",
+      "name": "enviar Mensaje",
+      "webhookId": "f563a56d-1ca4-4597-811a-2ee437bb17f2",
+      "credentials": {
+        "telegramApi": {
+          "id": "0vRxEDeXqReywfpM",
+          "name": "tareasAgendadas_bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "recuperar Tarea(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sin Error": {
+      "main": [
+        [
+          {
+            "node": "tarea(s) Lista(s)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "actualizar Tarea(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recuperar Tarea(s)": {
+      "main": [
+        [
+          {
+            "node": "validar Tarea(s) + preparar Tarea(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validar Tarea(s) + preparar Tarea(s)": {
+      "main": [
+        [
+          {
+            "node": "actualizar Procesada",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sin Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tarea(s) Lista(s)": {
+      "main": [
+        [
+          {
+            "node": "agendar Tarea(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "actualizar Procesada": {
+      "main": [
+        []
+      ]
+    },
+    "agendar Tarea(s)": {
+      "main": [
+        [
+          {
+            "node": "actualizar EstadoTarea(s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "preparar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "preparar Mensaje": {
+      "main": [
+        [
+          {
+            "node": "enviar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4429a549-1a17-4c30-8d60-92d4bc67bcb2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b74181930a8c68af667c33670eff6535c05e64ffaf070f0d61fda713c005af93"
+  },
+  "id": "WmN5GiQ9Qbb8ppZ4",
+  "tags": []
+}
