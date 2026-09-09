@@ -1,0 +1,931 @@
+{
+  "name": "Triage de Mails (IA + Fallback Heurístico) → Alertas de Reunión",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userPrompt }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $json.systemPrompt }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1248,
+        96
+      ],
+      "id": "527706cb-3fec-4c38-80d5-b5a06908a361",
+      "name": "AI Agent",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        272
+      ],
+      "id": "98423ebf-e792-4103-a6cc-9ee2923b952c",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "N7N77jAn42A5MgOZ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"clasificacion\": \"SOLICITUD_DE_REUNION | CONSULTA_GENERAL\",\n  \"confianza\": \"alta | media | baja\",\n  \"razon\": \"Explicación breve (máximo 2 oraciones).\",\n  \"palabras_clave_detectadas\": [\"lista\", \"de\", \"términos\", \"relevantes\"],\n  \"nombre_remitente\": \"Nombre Apellido | null\",\n  \"tema\": \"resumen breve del asunto. Para reuniones incluye fecha y hora si las hay. Ejemplo: demo producto enterprise — jueves 10hs| null\"\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1392,
+        272
+      ],
+      "id": "8e6d042e-9335-4961-b43c-f2edb26c0978",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "State",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        192,
+        0
+      ],
+      "id": "e2c5dd0d-d2d9-46a7-b7f0-2b67a6fe40d0",
+      "name": "tomar CircuitState",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "695bff8c-dfab-4178-9a34-3b6fb2716718",
+      "name": "llegada Mail",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jG55SFfWgN3rYYpd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CheckCircuitBreaker v1.0\n\n//const FAILURE_THRESHOLD = 5;\nconst TIMEOUT_MS = 60000; \n//const HALF_OPEN_TIMEOUT_MS = 30000;\nconst sheetData = $input.first().json;\n\nconst circuitState = {\n  state: sheetData.state || 'closed',\n  failureCount: Number(sheetData.failureCount) || 0,\n  lastFailureTime: sheetData.lastFailureTime || null,\n  openedAt: sheetData.openedAt || null,\n  succesCount: sheetData.succesCount || 0\n};\n\nconst mail = $('llegada Mail').first().json;\n\nconst now = Date.now();\nif (circuitState.state === 'open') { //si el circuitBreaker está abierto\n  const timeSinceOpen = now - Number(circuitState.openedAt);\n  if (timeSinceOpen > TIMEOUT_MS) { //ya hace un minuto que fue abierto, pruebo cerrarlo de a poco\n    console.log('🔄 Circuit Breaker: Transitioning to HALF_OPEN');\n    circuitState.state = 'half_open'; //primero lo dejo en half-open\n    circuitState.successCount = 0; //inicio el contador \n  } \n  else {\n    const remainingMs = TIMEOUT_MS - timeSinceOpen;\n    console.log(`🔴 Circuit Breaker OPEN - Reintentar en ${Math.ceil(remainingMs/1000)}s`); //si falta para el minuto\n    return [{\n      json: {\n        circuitOpen: true,\n        circuitState: 'open',\n        retryAfterMs: remainingMs,\n        message: 'Circuit breaker abierto - API temporalmente no disponible',\n        useFallback: true,\n        mail,\n        _circuitStateToSave: circuitState //como uso un sheets de base de datos, la carga tiene que ser en un nodo próximo, no acá, por eso guardo el estado en un json que le pasaré más adelante. \n      }\n    }];\n  }\n}\n\n//si está cerrado o half open\nconsole.log(`✅ Circuit Breaker ${circuitState.state.toUpperCase()} - Permitiendo requests`); \n\nreturn [{\n  json: {\n    circuitOpen: false,\n    circuitState: circuitState.state,\n    mail,\n    canProceed: true,\n    _circuitStateToSave:circuitState\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "id": "f95e5b26-4306-4efa-9817-d1658e8dfd28",
+      "name": "consultar CircuitState"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('llegada Mail').first().json;\n\nconst mailForPrompt = {\n  asunto: datos.Subject || '',\n  cuerpo: datos.snippet || '',\n  remitente: datos.From || ''\n  \n};\n\nconst systemPrompt = `Eres un clasificador y extractor de información experto en correos electrónicos. Tu función es analizar el contenido de un correo y devolver una clasificación más datos estructurados clave.\\n\\nCLASIFICACIONES POSIBLES:\\n- SOLICITUD_DE_REUNION: El remitente busca coordinar, agendar o proponer un encuentro (presencial, virtual o telefónico).\\n- CONSULTA_GENERAL: El remitente busca información, hace una pregunta, solicita ayuda, reporta un problema o realiza cualquier otra comunicación que no implica agendar un encuentro.\\n\\n---\\n\\nINSTRUCCIONES DE CLASIFICACIÓN\\n\\nPaso 1 — Análisis del correo\\nAntes de clasificar, identifica internamente:\\n1. Intención principal: ¿Qué quiere lograr el remitente?\\n2. Palabras o frases clave: ¿Hay indicadores de reunión o consulta?\\n3. Contexto y tono: ¿Es formal, urgente, informativo?\\n\\nPaso 2 — Aplicación de reglas\\n\\nClasifica como SOLICITUD_DE_REUNION si el correo:\\n- Propone, solicita o confirma una reunión, llamada, videollamada, café, entrevista o encuentro.\\n- Menciona disponibilidad horaria, fechas o plataformas (Zoom, Teams, Meet, etc.).\\n- Usa frases como: \"¿podemos reunirnos?\", \"me gustaría coordinar una llamada\", \"¿tenés disponibilidad esta semana?\".\\n- Hace referencia a invitaciones de calendario o links de agendamiento.\\n\\nClasifica como CONSULTA_GENERAL si el correo:\\n- Hace preguntas sobre productos, servicios, procesos, precios o cualquier otro tema.\\n- Solicita documentación, información, presupuestos o aclaraciones.\\n- Reporta un problema, hace un reclamo o brinda feedback.\\n- Es informativo, de seguimiento o de agradecimiento sin solicitud de encuentro.\\n- Contiene una solicitud de reunión secundaria pero cuya intención principal es obtener información.\\n\\nPaso 3 — Manejo de ambigüedad\\n- Si hay ambas intenciones, clasificá según la intención dominante.\\n- Si es imposible determinar, clasificá como CONSULTA_GENERAL con confianza \"baja\".\\n\\nPaso 4 — Extracción de nombre del remitente\\nUsá esta jerarquía, quedándote con el primer dato disponible:\\n1. Nombre explícito en la firma del correo (ej: \"Saludos, Juan Pérez\")\\n2. Nombre en el campo remitente de Gmail (se te proveerá como REMITENTE_GMAIL)\\n3. Si solo tenés el email, tomá la parte antes del @ y convertila en nombre legible (ej: \"juan.perez\" → \"Juan Pérez\")\\n4. Si nada de esto aplica, devolvé null.\\n\\nPaso 5 — Extracción de tema Resumí el asunto central del correo en 5 palabras o menos. Debe ser concreto y accionable, no genérico. - Bien: \"presupuesto campaña redes sociales\", \"dudas contrato renovación\", \"demo producto enterprise\" - Mal: \"consulta general\", \"reunión\", \"información\" Si la clasificación es SOLICITUD_DE_REUNION, buscá además indicios de fecha y horario en el cuerpo y el asunto. Si los encontrás, incluilos al final del tema separados por \" — \". - Ejemplos con fecha: \"demo producto enterprise — jueves 10hs\", \"avances proyecto — semana que viene\", \"propuesta comercial — 15/03 a las 14hs\" - Si no hay indicios de fecha u horario, dejá solo el tema sin el separador. Si no podés determinar el tema con certeza, devolvé null.\\n\\n---\\n\\nFORMATO DE SALIDA\\n\\nRespondé únicamente con un objeto JSON válido, sin texto adicional, sin markdown:\\n{\\n  \"clasificacion\": \"SOLICITUD_DE_REUNION\" | \"CONSULTA_GENERAL\",\\n  \"confianza\": \"alta\" | \"media\" | \"baja\",\\n  \"razon\": \"Explicación breve (máximo 2 oraciones).\",\\n  \"palabras_clave_detectadas\": [\"lista\", \"de\", \"términos\", \"relevantes\"],\\n  \"nombre_remitente\": \"Nombre Apellido\" | null,\\n  \"tema\": \"resumen en 5 palabras o menos\" | null\\n}\\n\\nNiveles de confianza:\\n- alta: La intención es clara e inequívoca.\\n- media: Hay señales claras pero también elementos ambiguos.\\n- baja: El correo es vago, incompleto o genuinamente ambiguo.\\n\\n---\\n\\nEJEMPLOS DE REFERENCIA\\n\\nEjemplo 1\\nEntrada:\\nREMITENTE_GMAIL: Maria Garcia <maria.garcia@empresa.com>\\nASUNTO: Reunión para ver propuesta\\nCUERPO: Hola, ¿tendrías disponibilidad para una llamada de 30 minutos esta semana? Quería comentarte los avances del proyecto. Saludos, María\\n\\nSalida: {\"clasificacion\": \"SOLICITUD_DE_REUNION\", \"confianza\": \"alta\", \"razon\": \"El remitente solicita explícitamente una llamada y propone una duración específica.\", \"palabras_clave_detectadas\": [\"disponibilidad\", \"llamada\", \"esta semana\"], \"nombre_remitente\": \"María\", \"tema\": \"avances del proyecto\"}\\n\\nEjemplo 2\\nEntrada:\\nREMITENTE_GMAIL: j.rodriguez99@gmail.com\\nASUNTO: Consulta\\nCUERPO: Buenos días, ¿me podrían indicar cuáles son los plazos de entrega para pedidos al exterior? Muchas gracias.\\n\\nSalida: {\"clasificacion\": \"CONSULTA_GENERAL\", \"confianza\": \"alta\", \"razon\": \"El remitente solicita información específica sobre plazos de entrega, sin intención de agendar un encuentro.\", \"palabras_clave_detectadas\": [\"plazos de entrega\", \"pedidos al exterior\"], \"nombre_remitente\": \"J. Rodriguez\", \"tema\": \"plazos entrega pedidos exterior\"}\\n\\n---\\n\\nRESTRICCIONES\\n- No respondas con texto fuera del JSON.\\n- No uses clasificaciones distintas a SOLICITUD_DE_REUNION o CONSULTA_GENERAL.\\n- No hagas suposiciones más allá del texto del correo.\\n- Si el correo está en otro idioma, respondé el JSON en español.\\n- Ignora saludos genéricos al analizar la intención, pero usálos para extraer el nombre.\\n\\n---\\n\\nEl correo a clasificar se te entregará en el siguiente formato:\\n\\nREMITENTE_GMAIL: [nombre y email del remitente]\\nASUNTO: [asunto del mail]\\nCUERPO: [cuerpo del mail]`;\n\nconst userPrompt= `Califica el siguiente mail:\" REMITENTE_GMAIL:${mailForPrompt.remitente}; ASUNTO: ${mailForPrompt.asunto}; CUERPO:${mailForPrompt.cuerpo} \"`;\n\nreturn [{\n  json:{\n    mailForPrompt,\n    systemPrompt,\n    userPrompt\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        96
+      ],
+      "id": "5bfb900e-ff19-425a-b4a1-96fa9b07a52e",
+      "name": "armar Prompt"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ParseAIResponse v2.0\n// Parsea respuesta de OpenAI con manejo robusto de errores\n// Función para actualizar circuit breaker\n\nconst FAILURE_THRESHOLD = 5;\n\nconst prevCircuitState = $('consultar CircuitState').first().json._circuitStateToSave\nconst circuitState= { //normalizo los valores del estado previo \n  state:prevCircuitState.state || 'closed',\n  failureCount: Number(prevCircuitState.failureCount) || 0,\n  lastFailureTime: prevCircuitState.lastFailureTime || null,\n  openedAt: prevCircuitState.openedAt || null,\n  successCount: Number(prevCircuitState.succesCount) || 0\n};\n\nconst aiResponse = $input.first().json.output;\nconst originalMail = $('llegada Mail').first().json.originalTask;\n\nif (!aiResponse ){\n  circuitState.failureCount++;\n  circuitState.lastFailureTime = Date.now();\n  if (circuitState.failureCount >= FAILURE_THRESHOLD){\n    \n    circuitState.state = 'open';\n    circuitState.openedAt = Date.now() ;\n  }\n  return [{ \n    json:{\n      ...originalMail,\n      error:true,\n      _circuitStateToSave: circuitState \n    }\n  }];\n}\n\nif (circuitState.state == 'half_open'){\n  circuitState.succesCount++;\n  if (circuitState.succesCount >=2){\n    circuitState.failureCount=0;\n    circuitState.openedAt = null;\n  }\n}\n  \nelse if (circuitState.state === 'closed'){\n  circuitState.failureCount = 0;\n}\n\nreturn[{\n  json:{\n    mail_clasification:{\n      ...originalMail,\n      clasificacion: aiResponse.clasificacion,\n      confianza: aiResponse.confianza,\n      justificacion: aiResponse.razon,\n      nombre_remitente: aiResponse.nombre_remitente,\n      tema: aiResponse.tema,\n      clasificacion_method: 'ai_clasification'\n    },\n    palabras_clave_detectadas: aiResponse.palabras_clave_detectadas,\n    classifiedAt: new Date().toISOString(),\n    error:false,\n    _circuitStateToSave: circuitState\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        96
+      ],
+      "id": "54a31a06-36a7-4622-8699-d490ca02355f",
+      "name": "aiResponse + estado"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1QgUK2A1sOfeeHhGIbwk5XiLUk0koQDNcy9LRph1Gknc/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Palabras",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1QgUK2A1sOfeeHhGIbwk5XiLUk0koQDNcy9LRph1Gknc/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "SOLICITUD_DE_REUNION": "={{ $json.SOLICITUD_DE_REUNION }}",
+            "CONSULTA_GENERAL": "={{ $json.CONSULTA_GENERAL }}"
+          },
+          "matchingColumns": [
+            "palabra"
+          ],
+          "schema": [
+            {
+              "id": "SOLICITUD_DE_REUNION",
+              "displayName": "SOLICITUD_DE_REUNION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "CONSULTA_GENERAL",
+              "displayName": "CONSULTA_GENERAL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2848,
+        272
+      ],
+      "id": "799a6550-c3b6-4c93-a47c-c2394d3ad49a",
+      "name": "agregar PalabrasClave",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "palabras_clave_detectadas",
+        "include": "selectedOtherFields",
+        "fieldsToInclude": "clasificacion",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        272
+      ],
+      "id": "69466240-f681-4b9e-893e-c0cba3f9da48",
+      "name": "separar Palabras"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c94a5bf-7dfb-4699-b56b-34b1ae3d7233",
+              "leftValue": "={{ $('aiResponse + estado').item.json.error }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2224,
+        96
+      ],
+      "id": "69966315-05f6-4263-88f7-d6d16ae7dd41",
+      "name": "error"
+    },
+    {
+      "parameters": {
+        "jsCode": "// UseMailClassificationHeuristic v1.0\n// Clasifica mails usando reglas heurísticas cuando AI no disponible\n// --- TEMA + FECHA/HORA (para reuniones) ---\nfunction extractFechaHora(texto) {\n  const t = texto.toLowerCase();\n  const patrones = [\n    // Fechas numéricas: 15/03, 15-03, 15/03/2026\n    /\\b\\d{1,2}[\\/\\-]\\d{1,2}(?:[\\/\\-]\\d{2,4})?\\b/,\n    // Días de la semana\n    /\\b(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\\b/,\n    // Referencias relativas\n    /\\b(hoy|mañana|manana|pasado mañana|esta semana|la semana que viene|próxima semana|proxima semana)\\b/,\n    // Horarios: 10hs, 10:30, 10:30hs, 10h\n    /\\b\\d{1,2}(?::\\d{2})?(?:\\s*hs?)\\b/,\n    // Rangos horarios: entre las 10 y las 12\n    /entre las \\d{1,2} y las \\d{1,2}/\n  ];\n\n  for (const patron of patrones) {\n    const match = t.match(patron);\n    if (match) return match[0].trim();\n  }\n  return null;\n}\n\nfunction classifyMailHeuristic(mail, keywordsFromSheets) {\n\n  // --- PALABRAS CLAVE BASE (fallback si Sheets está vacío) ---\n  const baseKeywords = {\n    SOLICITUD_DE_REUNION: [\n      'reunión', 'reunion', 'llamada', 'videollamada', 'disponibilidad',\n      'agendemos', 'coordinar', 'zoom', 'meet', 'teams', 'café', 'cafe',\n      'nos vemos', 'podemos hablar', 'tenés un momento', 'tenes un momento'\n    ],\n    CONSULTA_GENERAL: [\n      'consulta', 'pregunta', 'información', 'informacion', 'presupuesto',\n      'plazo', 'entrega', 'precio', 'costo', 'ayuda', 'problema', 'error',\n      'reclamo', 'feedback', 'estado', 'actualización', 'actualizacion'\n    ]\n  };\n\n  const reunionKeywords = [\n    ...baseKeywords.SOLICITUD_DE_REUNION,\n    ...(keywordsFromSheets.SOLICITUD_DE_REUNION || [])\n  ];\n  const consultaKeywords = [\n    ...baseKeywords.CONSULTA_GENERAL,\n    ...(keywordsFromSheets.CONSULTA_GENERAL || [])\n  ];\n\n  // --- SCORING ---\n  const text = (mail.asunto + ' ' + mail.cuerpo).toLowerCase();\n  let scoreReunion = 0;\n  let scoreConsulta = 0;\n\n  reunionKeywords.forEach(kw => {\n    if (text.includes(kw)) {\n      const bonus = (keywordsFromSheets.SOLICITUD_DE_REUNION || []).includes(kw) ? 60 : 40;\n      scoreReunion += bonus;\n    }\n  });\n  consultaKeywords.forEach(kw => {\n    if (text.includes(kw)) {\n      const bonus = (keywordsFromSheets.CONSULTA_GENERAL || []).includes(kw) ? 60 : 40;\n      scoreConsulta += bonus;\n    }\n  });\n\n  // --- CLASIFICACIÓN ---\n  let clasificacion = 'CONSULTA_GENERAL';\n  let confianza = 'baja';\n  const diff = Math.abs(scoreReunion - scoreConsulta);\n\n  if (scoreReunion === 0 && scoreConsulta === 0) {\n    confianza = 'baja';\n  } else if (scoreReunion > scoreConsulta) {\n    clasificacion = 'SOLICITUD_DE_REUNION';\n    confianza = diff >= 60 ? 'alta' : diff >= 30 ? 'media' : 'baja';\n  } else {\n    clasificacion = 'CONSULTA_GENERAL';\n    confianza = diff >= 60 ? 'alta' : diff >= 30 ? 'media' : 'baja';\n  }\n\n\n  // --- NOMBRE ---\n  let nombre_remitente = null;\n  const from = mail.remitente;\n  if (from) {\n    const conNombre = from.match(/^(.+?)\\s*</);\n    if (conNombre) {\n      nombre_remitente = conNombre[1].replace(/\"/g, '').trim();\n    } else {\n      const soloEmail = from.match(/([^@<\\s]+)@/);\n      if (soloEmail) {\n        nombre_remitente = soloEmail[1]\n          .replace(/[._-]/g, ' ')\n          .split(' ')\n          .map(w => w.charAt(0).toUpperCase() + w.slice(1))\n          .join(' ');\n      }\n    }\n  }\n\n  // --- TEMA ---\n  let tema = null;\n  const stopWords = [\n    're:', 'fwd:', 'fw:', 'consulta', 'pregunta', 'hola', 'buenos días',\n    'buenas tardes', 'estimado', 'estimados', 'saludos', 'sobre', 'acerca',\n    'de', 'la', 'el', 'los', 'las', 'un', 'una', 'por', 'para', 'con', 'del', 'al'\n  ];\n  const limpiar = (texto) => {\n    let t = texto.toLowerCase();\n    stopWords.forEach(sw => {\n      t = t.replace(new RegExp(`\\\\b${sw}\\\\b`, 'gi'), '');\n    });\n    return t.replace(/\\s+/g, ' ').trim();\n  };\n\n  if (mail.asunto && mail.asunto.trim().length > 3) {\n    const candidato = limpiar(mail.asunto);\n    if (candidato.length > 3) tema = candidato.split(' ').slice(0, 5).join(' ');\n  }\n  if (!tema && mail.cuerpo && mail.cuerpo.trim().length > 0) {\n    const primeraLinea = mail.cuerpo.split('\\n').find(l => l.trim().length > 10) || '';\n    const candidato = limpiar(primeraLinea);\n    if (candidato.length > 3) tema = candidato.split(' ').slice(0, 5).join(' ');\n  }\n  \n  if (clasificacion === 'SOLICITUD_DE_REUNION') {\n    const textoCompleto = mail.asunto + ' ' + mail.cuerpo;\n    const fechaHora = extractFechaHora(textoCompleto);\n    if (fechaHora) {\n      tema = (tema || 'reunión') + ' — ' + fechaHora;\n    }\n  }\n\n  return {\n    clasificacion,\n    confianza,\n    razon: `Clasificación heurística (score reunión: ${scoreReunion} / consulta: ${scoreConsulta}). AI temporalmente no disponible.`,\n    score_reunion: scoreReunion,\n    score_consulta: scoreConsulta,\n    method: 'heuristic_fallback',\n    nombre_remitente,\n    tema\n  };\n}\n\n// --- INPUT ---\nconst datos = $('llegada Mail').first().json;\n\nconst mailForPrompt = {\n  asunto: datos.Subject || '',\n  cuerpo: datos.snippet || '',\n  remitente: datos.From || ''\n};\n\nconst keywordsFromSheets = { SOLICITUD_DE_REUNION: [], CONSULTA_GENERAL: [] };\n\nconst result = classifyMailHeuristic(mailForPrompt, keywordsFromSheets);\n\nconsole.log(`⚠️ Usando fallback heurístico para mail: \"${mailForPrompt.asunto}\"`);\n\nreturn [{\n  json: {\n    mail_clasification: {\n      ...mailForPrompt,\n      clasificacion: result.clasificacion,\n      confianza: result.confianza,\n      justificacion: result.razon,\n      nombre_remitente: result.nombre_remitente,\n      tema: result.tema,\n      clasificacion_method: result.method\n    },\n    clasificacion_score_reunion: result.score_reunion,\n    clasificacion_score_consulta: result.score_consulta,\n    usedFallback: true,\n    classifiedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        -16
+      ],
+      "id": "0e595044-4eb0-4f93-9d12-cef925c9ad0e",
+      "name": "clasificacion Heuristica"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b1fbb85d-fba6-4158-88ff-f26a61c957a9",
+              "leftValue": "={{ $('consultar CircuitState').item.json.circuitOpen }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        784,
+        0
+      ],
+      "id": "cf28b97a-c596-4606-9f1a-8193912aa4c6",
+      "name": "circuito Abierto"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "124293e5-1684-4f49-985d-90c017e99cad",
+              "leftValue": "={{ $json.mail_clasification.clasificacion }}",
+              "rightValue": "SOLICITUD_DE_REUNION",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2944,
+        96
+      ],
+      "id": "e83ed27e-f971-40ab-8b7f-ce6391d91c20",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "return[{\n  json:$('aiResponse + estado').first().json\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        96
+      ],
+      "id": "12b65d65-2b08-4c72-958e-8ca0e6421ecf",
+      "name": "recuperar Output1"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "8601444437",
+        "message": "={{ $json.mensaje }}",
+        "approvalOptions": {
+          "values": {}
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3456,
+        80
+      ],
+      "id": "d10bfe07-acf1-4a68-8418-cdbd5c4fd24f",
+      "name": "Send a text message",
+      "webhookId": "4315073a-f768-4f6c-b644-c38ce2ab8cb6",
+      "retryOnFail": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "3uEFvOZZqEH9jUa3",
+          "name": "asistenteMails_bot"
+        }
+      },
+      "notes": "Con append n8n atributtion me da error si encuentra un \"_\" en el texto (no se por qué)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json.mail_clasification;\n\nconst mensaje= `¡Recibiste una nueva solicitud de reunión!\\n-CONFIANZA: ${datos.confianza}${datos.confianza === 'baja' ? '(conviene revisar)' : ''}\\n-MÉTODO DE CLASIFICACIÓN: ${datos.clasificacion_method.replace(/_/g, '-')}\\n-NOMBRE: ${datos.nombre_remitente}\\n-TEMA: ${datos.tema}`;\n\nreturn [{\n  json:{\n    mensaje,\n    datos\n  }\n}];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3216,
+        80
+      ],
+      "id": "68ca0f44-cb5e-433a-b42e-be09889fa00b",
+      "name": "Preparar mensaje"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2688,
+        96
+      ],
+      "id": "7c68d528-f5bd-4c27-9ad7-7dace63afcec",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Confianza baja → no agregar nada\nif (data.confianza === 'baja') {\n  return [];\n}\n\nconst palabras = data.palabras_clave_detectadas || [];\nconst clasificacion = data.clasificacion;\n\nreturn [{\n  json: {\n    SOLICITUD_DE_REUNION: clasificacion === 'SOLICITUD_DE_REUNION' ? palabras : [],\n    CONSULTA_GENERAL: clasificacion === 'CONSULTA_GENERAL' ? palabras : []\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        272
+      ],
+      "id": "a0762cd2-70a3-4d2f-805d-8c4c3dbab2e6",
+      "name": "preparar PalabrasClave"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dissipatedly-spadiceous-essie.ngrok-free.dev/webhook-test/1f060165-3c02-4c73-a414-7d73ca167f79",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "nombre",
+              "value": "={{ $('Preparar mensaje').item.json.datos.nombre_remitente }}"
+            },
+            {
+              "name": "tema",
+              "value": "={{ $('Preparar mensaje').item.json.datos.tema }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3664,
+        80
+      ],
+      "id": "1d427464-de1e-4e80-bee5-1685215ad6f9",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "State",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": 2,
+            "state": "={{ $json._circuitStateToSave.state }}",
+            "failureCount": "={{ $json._circuitStateToSave.failureCount }}",
+            "lastFailureTime": "={{ $json._circuitStateToSave.lastFailureTime }}",
+            "openedAt": "={{ $json._circuitStateToSave.openedAt }}",
+            "succesCount": "={{ $json._circuitStateToSave.successCount }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "failureCount",
+              "displayName": "failureCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lastFailureTime",
+              "displayName": "lastFailureTime",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "openedAt",
+              "displayName": "openedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "succesCount",
+              "displayName": "succesCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1808,
+        96
+      ],
+      "id": "05696cb1-c519-4d58-a1d8-2afa106d27d4",
+      "name": "actualizar CircuitState2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "State",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1eKyXwlyJoBPhlnO-t8Xfb5wj8uivCup0Ay1SzwYGNKw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": 2,
+            "state": "={{ $json._circuitStateToSave.state }}",
+            "failureCount": "={{ $json._circuitStateToSave.failureCount }}",
+            "lastFailureTime": "={{ $json._circuitStateToSave.lastFailureTime }}",
+            "openedAt": "={{ $json._circuitStateToSave.openedAt }}",
+            "succesCount": "={{ $json._circuitStateToSave.succesCount }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "failureCount",
+              "displayName": "failureCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lastFailureTime",
+              "displayName": "lastFailureTime",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "openedAt",
+              "displayName": "openedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "succesCount",
+              "displayName": "succesCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        592,
+        0
+      ],
+      "id": "27aff0cb-25d2-48e0-8e08-5478a0cdd1cb",
+      "name": "actualizar CircuitState",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tomar CircuitState": {
+      "main": [
+        [
+          {
+            "node": "consultar CircuitState",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llegada Mail": {
+      "main": [
+        [
+          {
+            "node": "tomar CircuitState",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar CircuitState": {
+      "main": [
+        [
+          {
+            "node": "actualizar CircuitState",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "armar Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "aiResponse + estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aiResponse + estado": {
+      "main": [
+        [
+          {
+            "node": "actualizar CircuitState2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "separar Palabras": {
+      "main": [
+        [
+          {
+            "node": "preparar PalabrasClave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "error": {
+      "main": [
+        [
+          {
+            "node": "clasificacion Heuristica",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "separar Palabras",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "circuito Abierto": {
+      "main": [
+        [
+          {
+            "node": "clasificacion Heuristica",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "armar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agregar PalabrasClave": {
+      "main": [
+        []
+      ]
+    },
+    "clasificacion Heuristica": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recuperar Output1": {
+      "main": [
+        [
+          {
+            "node": "error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Preparar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar mensaje": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar PalabrasClave": {
+      "main": [
+        [
+          {
+            "node": "agregar PalabrasClave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "actualizar CircuitState2": {
+      "main": [
+        [
+          {
+            "node": "recuperar Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "actualizar CircuitState": {
+      "main": [
+        [
+          {
+            "node": "circuito Abierto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3fd2dcf2-c964-4b67-8dee-932f5b6284a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b74181930a8c68af667c33670eff6535c05e64ffaf070f0d61fda713c005af93"
+  },
+  "id": "jvv2xSnxXwkAUKkO",
+  "tags": []
+}
