@@ -1,0 +1,917 @@
+{
+  "name": "Automatización y Orquestación de Procesos con IA Multicanal",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "unread"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f7cf21b9-9d97-4f75-8068-85670bfd0ab9",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jG55SFfWgN3rYYpd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $input.first().json;\n\nif (!email.Subject && email.snippet.length <= 10 ){\n\n  return {\n    json: { isValid: false}\n  }\n}\nelse {\n  const cleanMail = {\n     messageId : email.id,\n     from : email.From,\n     subject : email.Subject.trim().slice(0,500) || '',\n     snippet : email.snippet.trim().slice(0,5000),\n     receivedAt : email.internalDate || Date.now()\n     \n  }\n  \n  const hashInput = `${cleanMail.from}|${cleanMail.subject}|${cleanMail.snippet.slice(0, 500)}`;\n  const emailHash = { \n    hash : hashInput.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) & 0xffffffff, 0).toString(16).padStart(8, '0'),\n    processedAt : Date.now() \n  }\n  \n  return [{\n    json: {\n      emailHash,\n      cleanMail,\n      isValid: true\n      }\n  }];\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "7b1252f8-5d70-44d9-ad21-167dc7d22d46",
+      "name": "validar Mail + hashear Mail"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "05a11599-f18c-4651-991f-50a7646a588e",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "e10423cc-da6a-44d7-8c3f-76fa6165b548",
+      "name": "isValid"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mailData = $('isValid').first().json.cleanMail;\n\nconst prompt = `Datos del correo a analizar\\n\\n- **From:** [${mailData.from}]\\n- **Subject:** [${mailData.subject}]\\n- **Snippet:** [${mailData.snippet}]\\n- **InternalDate:** [${mailData.receivedAt}]`\n\nconst systemMessage = 'Eres un agente especializado en extracción de eventos desde correos electrónicos. Tu única tarea es analizar los datos de un correo y detectar todos los eventos mencionados, devolviéndolos en formato JSON estructurado. No respondas con texto adicional fuera del JSON.\\n\\n---\\n\\n## Formato de salida\\nDevuelve exclusivamente un array JSON. Cada objeto representa un evento y debe tener estos campos:\\n\\n```json\\n[\\n\\t{\\n\\t\\t\\\"nombre_evento\\\": string | null,\\n\\t\\t\\\"fechaThora_inicio\\\": string | null,\\n\\t\\t\\\"fechaThora_fin\\\": string | null,\\n\\t\\t\\\"participantes\\\": array | null\\n\\t}\\n]\\n```\\n\\n> **fechaThora_inicio** y **fechaThora_fin** usan el formato `YYYY-MM-DDTHH:mm:ss`\\n\\nSi no hay eventos, devuelve: `[]`\\n\\n---\\n\\n## Reglas\\n\\n1. Si un campo no puede determinarse con certeza → `null`. No inventes datos.\\n2. **Evento de todo el día** → fechaThora_inicio: `YYYY-MM-DDT00:00:00` (fecha del evento), fechaThora_fin: `YYYY-MM-DDT00:00:00` (día siguiente).\\n3. **Fechas relativas** (mañana, el lunes, etc.) → calcula desde internalDate si está disponible; si no → `null`.\\n4. **Participantes** → extrae nombres de From en caso de que el remitente haga referencia a sí mismo ( \"yo\", \"mí\", etc...) y el from contenga nombre, Subject o Snippet mencionados como asistentes, invitados u organizadores.\\n5. **Múltiples eventos** → un objeto por evento en el array.\\n6. **Zona horaria mencionada** → inclúyela al final del valor (ej: `2024-07-05T14:00:00+02:00`).\\n7. **Sin título explícito** → infiere uno breve (máx. 5 palabras) desde Subject o Snippet; si no hay contexto → `null`.\\n\\n---\\n\\n## Casos borde\\n\\n- **Ambigüedad AM/PM** sin contexto suficiente → `null` en fechaThora_inicio y fechaThora_fin.\\n- **Rango de fechas** (ej: del 5 al 8 de julio) → fechaThora_inicio = inicio del primer día (`T00:00:00`), fechaThora_fin = inicio del día posterior al último (`T00:00:00`).\\n\\n---\\n\\n## Datos del correo a analizar\\n\\n- **From:** [REMITENTE]\\n- **Subject:** [ASUNTO]\\n- **Snippet:** [FRAGMENTO]\\n- **InternalDate:** [TIMESTAMP EN MS O FECHA ISO]';\n\nreturn [{\n  json:{\n    prompt,\n    systemMessage,\n    mailForPrompt: mailData\n  }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -112
+      ],
+      "id": "78324d24-23ec-4651-bc2d-46de68b0fb46",
+      "name": "preparar Prompt"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ea600778-1130-4037-84fe-6471e973c1bb",
+              "leftValue": "={{ $input.first().json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        848,
+        -96
+      ],
+      "id": "2bed9fe2-8117-4c24-89ec-840c2c896ff2",
+      "name": "no Existe"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.systemMessage }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1408,
+        -112
+      ],
+      "id": "e4cb7a67-c3ff-42d4-8700-e921532f0ef0",
+      "name": "AI Agent",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        64
+      ],
+      "id": "09c3cc11-a034-403f-9784-0bfeb205a2c9",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "PoNgpZ4I1fGyrDSA",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1984,
+        -112
+      ],
+      "id": "9a7e8303-e745-469a-ae8e-04c22215f408",
+      "name": "recorrer Tareas"
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json.output;\n\n\nif (!aiResponse) {\n    return [{ json: { error: 'No hay respuesta disponible' } }];\n}\nelse {\n  try{\n     const cleanedAiResponse = aiResponse.trim().replace(/^```json\\n?/, '').replace(/\\n?```$/, '');\n     const parsedAiResponse= JSON.parse(cleanedAiResponse);\n     const events = Array.isArray(parsedAiResponse) ? parsedAiResponse : [parsedAiResponse];\n\n     return events.map(evento => ({\n       json: {\n         nombre_evento:     evento.nombre_evento     ?? null,\n         fechaThora_inicio: evento.fechaThora_inicio ?? null,\n         fechaThora_fin:    evento.fechaThora_fin    ?? null,\n         participantes:     evento.participantes     ?? null,\n         error: (!evento.fechaThora_inicio || !evento.fechaThora_fin) ? 'Fecha(s) no disponible(s)' : ''\n       }\n     }));\n  }\n  catch{\n    return [{ json: { error: 'Parseo no disponible' } }];\n  }\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        -112
+      ],
+      "id": "28ff989d-d28d-4144-9f50-1154f21bf0f4",
+      "name": "validar Output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "31a2e51c-4ffc-4f1f-be25-fcbdcc7ca6ff",
+              "leftValue": "={{ $('validar Output').item.json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2208,
+        -96
+      ],
+      "id": "95f23066-9db8-4d82-998b-8625d5f7e695",
+      "name": "hay Error"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1USze2iaXmSk0nQgqqvoRSeVDAwSPAZvt4sr9WmSXiH4/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hashes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1USze2iaXmSk0nQgqqvoRSeVDAwSPAZvt4sr9WmSXiH4/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "hash",
+              "lookupValue": "={{ $json.emailHash.hash }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        640,
+        -96
+      ],
+      "id": "f412c4ee-c06e-4064-a04c-cd04cd90b985",
+      "name": "recuperar MailHash",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1USze2iaXmSk0nQgqqvoRSeVDAwSPAZvt4sr9WmSXiH4/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hashes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1USze2iaXmSk0nQgqqvoRSeVDAwSPAZvt4sr9WmSXiH4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hash": "={{ $('validar Mail + hashear Mail').item.json.emailHash.hash }}",
+            "processedAt": "={{ $('validar Mail + hashear Mail').item.json.emailHash.processedAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hash",
+              "displayName": "hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processedAt",
+              "displayName": "processedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1056,
+        -256
+      ],
+      "id": "c6d95f8b-7f28-4867-80fd-bd9da9a07547",
+      "name": "agregar MailHash",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1wIsCJhLjitcUN9Bu5ELl9mL_J0cVGHJ1p3YMuw29ntY/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hashes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1wIsCJhLjitcUN9Bu5ELl9mL_J0cVGHJ1p3YMuw29ntY/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "hash",
+              "lookupValue": "={{ $json.eventHash.hash }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2608,
+        0
+      ],
+      "id": "889c8739-e053-45c4-a420-6c9d1e1e081e",
+      "name": "recuperar EventHash",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ea600778-1130-4037-84fe-6471e973c1bb",
+              "leftValue": "={{ $input.first().json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2832,
+        0
+      ],
+      "id": "87dae419-4a47-4858-acaa-35cc847d45e6",
+      "name": "no Existe2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1wIsCJhLjitcUN9Bu5ELl9mL_J0cVGHJ1p3YMuw29ntY/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hashes",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1wIsCJhLjitcUN9Bu5ELl9mL_J0cVGHJ1p3YMuw29ntY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hash": "={{ $('hashear Evento').item.json.eventHash.hash }}",
+            "processedAt": "={{ $('hashear Evento').item.json.eventHash.processedAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hash",
+              "displayName": "hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processedAt",
+              "displayName": "processedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3088,
+        -16
+      ],
+      "id": "1e0a8dd7-0c6d-4a52-a06a-28dd205c916b",
+      "name": "agregar EventHash",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h2SosgKv41YjNFVu",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "88242ff6c4ddf9e50848238e713babf570c4413c46b1749e2c89d1b4c41ae891@group.calendar.google.com",
+          "mode": "id"
+        },
+        "start": "={{ $('hay Error').item.json.fechaThora_inicio }}",
+        "end": "={{ $('hay Error').item.json.fechaThora_fin }}",
+        "additionalFields": {
+          "description": "=participantes: \n{{ $('hay Error').item.json.participantes.join('\\n') }}",
+          "summary": "={{ $('hay Error').item.json.nombre_evento }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        3296,
+        -16
+      ],
+      "id": "aef5b654-c496-4a36-8756-5ffe88728160",
+      "name": "crear Evento",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "z5tW5mVAWUHPZCrP",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventData = $input.first().json;\n\nconst hashInput = `${eventData.nombre_evento}|${eventData.fechaThora_inicio}|${eventData.fechaThora_fin}|${eventData.participantes}}`;\nconst eventHash = { \n  hash : hashInput.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) & 0xffffffff, 0).toString(16).padStart(8, '0'),\n  processedAt : Date.now() \n}\n\nreturn [{\n  json:{\n    eventHash,\n    eventData\n  }\n}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        0
+      ],
+      "id": "7e88e613-5f22-48db-8721-7c363ce86dc2",
+      "name": "hashear Evento"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.snippet }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2848,
+        -208
+      ],
+      "id": "552a41ce-12b2-475b-ac14-fd7c6ec03352",
+      "name": "Send a message",
+      "webhookId": "8db08071-0e73-4d23-a187-bc3453e73ff6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jG55SFfWgN3rYYpd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const mailData = $('isValid').first().json;\nconst eventData =$input.first().json;\n\nconst subject = `CORRECIÓN DE FECHA NECESARIA📅`;\n\nconst snippet = `La fecha de inicio y/o fin del evento \"${eventData.nombre_evento}\" no se ha podido determinar con certeza. Por favor sea más clara/o.`;\n\nconst to = mailData.cleanMail.from.match(/[\\w.-]+@[\\w.-]+\\.\\w+/)?.[0] ?? null;\n\nreturn[{\n  json:{\n    subject,\n    snippet,\n    to\n  }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -208
+      ],
+      "id": "4ae173f2-1f3f-4aa8-83ac-6b02fa4b19ed",
+      "name": "preparar Mail"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9c0b14de-e18b-4ef3-9b0a-0eaf98bea68a",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "Fecha(s) no disponible(s)",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2416,
+        -192
+      ],
+      "id": "a5daaef1-42ab-4055-9ca6-91f6bd82808e",
+      "name": "error Fecha"
+    },
+    {
+      "parameters": {
+        "chatId": "8601444437",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3712,
+        -16
+      ],
+      "id": "6e04f567-37b5-4e71-86f3-f570ef793ee9",
+      "name": "Send a text message",
+      "webhookId": "418a905b-5c7d-43ec-90ab-f4b33f71a2f5",
+      "credentials": {
+        "telegramApi": {
+          "id": "gZiwzLaq4Xb4VlVw",
+          "name": "eventoCreado_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventData = $input.first().json;\n\nconst mensaje = `EVENTO CREADO CON ÉXITO✅\\n\\t-Nombre: ${eventData.summary}\\n\\t-Comienza: ${eventData.start}\\n\\t-Termina:${eventData.end}\\n\\t-${eventData.description[0].toUpperCase() + eventData.description.slice(1)}\\n\\t-id:${eventData.id}`\n\nreturn[{json:{mensaje}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        -16
+      ],
+      "id": "eb70170b-1760-41bb-9b19-b384e1220ae6",
+      "name": "preparar Mensaje"
+    }
+  ],
+  "pinData": {
+    "Gmail Trigger": [
+      {
+        "json": {
+          "id": "19cfd326e04a7467",
+          "threadId": "19cfd326e04a7467",
+          "snippet": "Hola Santino, te confirmamos tu reunión de onboarding con el equipo de producto el próximo martes 25 de marzo a las 10:00hs. La llamada será por Google Meet y durará aproximadamente una hora. También recordá que el miércoles 26 tenemos el all-hands general de 09:00 a 10:00hs donde se espera la presencia de todo el equipo. Cualquier consulta respondé este mail.",
+          "payload": {
+            "mimeType": "multipart/alternative"
+          },
+          "sizeEstimate": 42441,
+          "historyId": "857648",
+          "internalDate": "1742810400000",
+          "labels": [
+            {
+              "id": "INBOX",
+              "name": "INBOX"
+            },
+            {
+              "id": "UNREAD",
+              "name": "UNREAD"
+            }
+          ],
+          "From": "Carla Méndez <carla.mendez@empresa.com>",
+          "Subject": "Confirmación de reuniones semana del 25/03",
+          "To": "santinomaya60@gmail.com"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "validar Mail + hashear Mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validar Mail + hashear Mail": {
+      "main": [
+        [
+          {
+            "node": "isValid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "isValid": {
+      "main": [
+        [
+          {
+            "node": "recuperar MailHash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "no Existe": {
+      "main": [
+        [
+          {
+            "node": "preparar Prompt",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "agregar MailHash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "validar Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recorrer Tareas": {
+      "main": [
+        [],
+        [
+          {
+            "node": "hay Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validar Output": {
+      "main": [
+        [
+          {
+            "node": "recorrer Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "hay Error": {
+      "main": [
+        [
+          {
+            "node": "error Fecha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "hashear Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recuperar MailHash": {
+      "main": [
+        [
+          {
+            "node": "no Existe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recuperar EventHash": {
+      "main": [
+        [
+          {
+            "node": "no Existe2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "no Existe2": {
+      "main": [
+        [
+          {
+            "node": "agregar EventHash",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "recorrer Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agregar EventHash": {
+      "main": [
+        [
+          {
+            "node": "crear Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "crear Evento": {
+      "main": [
+        [
+          {
+            "node": "preparar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "hashear Evento": {
+      "main": [
+        [
+          {
+            "node": "recuperar EventHash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar Mail": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "error Fecha": {
+      "main": [
+        [
+          {
+            "node": "preparar Mail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "recorrer Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "recorrer Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "recorrer Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "America/Argentina/Buenos_Aires",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "473748c2-503f-436d-9873-ca95299b178f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b74181930a8c68af667c33670eff6535c05e64ffaf070f0d61fda713c005af93"
+  },
+  "id": "ZMEOrBU9Mruk1sOS",
+  "tags": []
+}
