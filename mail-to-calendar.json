@@ -1,5 +1,5 @@
 {
-  "name": "Extracción de Eventos desde Mails → Creación en Google Calendar (con Deduplicación por Hash)",
+  "name": "mail-to-calendar",
   "nodes": [
     {
       "parameters": {
