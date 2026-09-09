@@ -2,17 +2,6 @@
 
 Repositorio de flujos n8n exportados como `.json`, listos para importar.
 
-## Estructura
-
-```
-/flujos
-  ├── clasificador-mails-circuit-breaker.json
-  ├── mail-to-calendar.json
-  ├── gestor-tareas-agenda.json
-  └── generador-posts-redes-sociales.json
-README.md
-```
-
 ## Flujos
 
 ### 1. Clasificador de Mails con Circuit Breaker
