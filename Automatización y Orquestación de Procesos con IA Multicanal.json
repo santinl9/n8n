@@ -1,5 +1,5 @@
 {
-  "name": "Automatización y Orquestación de Procesos con IA Multicanal",
+  "name": "Extracción de Eventos desde Mails → Creación en Google Calendar (con Deduplicación por Hash)",
   "nodes": [
     {
       "parameters": {
