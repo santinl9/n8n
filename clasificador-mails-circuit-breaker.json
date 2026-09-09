@@ -1,5 +1,5 @@
 {
-  "name": "Triage de Mails (IA + Fallback Heurístico) → Alertas de Reunión",
+  "name": "clasificador-mails-circuit-breaker",
   "nodes": [
     {
       "parameters": {
